@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📐</text></svg>">
+<title>体态自测 · AI 姿态评估</title>
+<style>
+  :root{
+    color-scheme: light;
+    --page:#f9f9f7; --surface:#fcfcfb;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7;
+    --border:rgba(11,11,11,.10);
+    --blue:#2a78d6; --orange:#eb6834; --aqua:#1baf7a;
+    --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --good-text:#006300;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--page); color:var(--ink); line-height:1.65; font-size:15px;
+  }
+  .wrap{max-width:960px; margin:0 auto; padding:24px 16px 80px;}
+  header.top{padding:28px 0 8px; text-align:center;}
+  header.top h1{font-size:26px; font-weight:700; letter-spacing:.5px;}
+  header.top p{color:var(--ink-2); margin-top:6px; font-size:14px;}
+  .privacy{display:inline-flex; align-items:center; gap:6px; margin-top:10px;
+    font-size:12.5px; color:var(--good-text); background:#eef7ee;
+    border:1px solid rgba(12,163,12,.25); border-radius:99px; padding:3px 12px;}
+  .card{background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    padding:20px; margin-top:16px; box-shadow:0 1px 2px rgba(11,11,11,.04);}
+  .card h2{font-size:17px; font-weight:700; margin-bottom:10px; display:flex; align-items:center; gap:8px;}
+  .stepnum{display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px;
+    border-radius:50%; background:var(--blue); color:#fff; font-size:13px; font-weight:700; flex:none;}
+  .hint{color:var(--ink-2); font-size:13.5px;}
+  .guide{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:10px; margin-top:12px;}
+  .guide div{background:var(--page); border:1px solid var(--grid); border-radius:10px; padding:10px 12px; font-size:13px; color:var(--ink-2);}
+  .guide b{color:var(--ink); display:block; margin-bottom:2px; font-size:13.5px;}
+  .uploads{display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-top:14px;}
+  .slot{border:1.5px dashed var(--baseline); border-radius:12px; padding:14px; text-align:center;
+    cursor:pointer; transition:border-color .15s, background .15s; background:var(--page); position:relative;}
+  .slot:hover{border-color:var(--blue); background:#f3f7fd;}
+  .slot.filled{border-style:solid; border-color:var(--blue); background:var(--surface);}
+  .slot .icon{font-size:30px;}
+  .slot h3{font-size:15px; margin:6px 0 2px;}
+  .slot .req{font-size:12px; color:var(--muted);}
+  .slot .req.must{color:var(--orange);}
+  .slot img.thumb{max-width:100%; max-height:180px; border-radius:8px; display:block; margin:8px auto 4px;}
+  .slot .replace{font-size:12.5px; color:var(--blue);}
+  .slot input{display:none;}
+  .btnrow{display:flex; gap:12px; flex-wrap:wrap; margin-top:18px; align-items:center;}
+  .btn{appearance:none; border:none; cursor:pointer; border-radius:10px; padding:11px 26px;
+    font-size:15px; font-weight:600; font-family:inherit; transition:opacity .15s;}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .btn-primary{background:var(--blue); color:#fff;}
+  .btn-ghost{background:transparent; color:var(--ink-2); border:1px solid var(--baseline);}
+  .btn:not(:disabled):hover{opacity:.88;}
+  .status-msg{font-size:13.5px; color:var(--ink-2);}
+  .error-banner{background:#fdf1f1; border:1px solid rgba(208,59,59,.35); color:#8c2626;
+    border-radius:10px; padding:10px 14px; font-size:13.5px; margin-top:12px; display:none;}
+  .warn-banner{background:#fdf8ec; border:1px solid rgba(250,178,25,.45); color:#7a5a00;
+    border-radius:10px; padding:10px 14px; font-size:13.5px; margin-top:12px;}
+  /* loading */
+  #loading{display:none; text-align:center; padding:40px 0;}
+  .spinner{width:38px; height:38px; border:4px solid var(--grid); border-top-color:var(--blue);
+    border-radius:50%; margin:0 auto 14px; animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  /* report */
+  #report{display:none;}
+  .hero{display:flex; gap:20px; flex-wrap:wrap; align-items:center;}
+  .score-tile{flex:none; text-align:center; padding:10px 26px;}
+  .score-tile .num{font-size:56px; font-weight:800; line-height:1.1;}
+  .score-tile .grade{font-size:14px; font-weight:600; margin-top:2px; display:inline-flex; align-items:center; gap:5px;}
+  .hero .sum{flex:1; min-width:220px;}
+  .hero .sum p{font-size:14px; color:var(--ink-2);}
+  .counts{display:flex; gap:14px; margin-top:10px; flex-wrap:wrap;}
+  .counts span{font-size:13px; color:var(--ink-2); display:inline-flex; align-items:center; gap:5px;}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+  .views-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; margin-top:12px;}
+  .viewbox{text-align:center;}
+  .viewbox canvas{max-width:100%; border-radius:10px; border:1px solid var(--grid); background:#fff;}
+  .viewbox .cap{font-size:13px; color:var(--muted); margin-top:4px;}
+  .finding{border:1px solid var(--grid); border-radius:12px; padding:14px 16px; margin-top:12px; background:var(--surface);}
+  .finding .head{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;}
+  .finding .name{font-weight:700; font-size:15px;}
+  .finding .val{font-size:13px; color:var(--ink-2); font-variant-numeric:tabular-nums;}
+  .chip{display:inline-flex; align-items:center; gap:5px; font-size:12.5px; font-weight:600;
+    border-radius:99px; padding:2px 11px; border:1px solid transparent;}
+  .chip.s0{color:var(--good-text); background:#eef7ee; border-color:rgba(12,163,12,.3);}
+  .chip.s1{color:#7a5a00; background:#fdf6e3; border-color:rgba(250,178,25,.45);}
+  .chip.s2{color:#9c3a18; background:#fdf0ea; border-color:rgba(236,131,90,.5);}
+  .chip.na{color:var(--muted); background:var(--page); border-color:var(--grid);}
+  .finding .desc{font-size:13.5px; color:var(--ink-2); margin-top:6px;}
+  .finding .advice{font-size:13.5px; margin-top:6px; padding-left:10px; border-left:3px solid var(--grid);}
+  .lowconf{font-size:12px; color:var(--muted); margin-top:4px;}
+  .range-note{font-size:12px; color:var(--muted);}
+  /* exercises */
+  .ex-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-top:12px;}
+  .ex-card{border:1px solid var(--grid); border-radius:12px; padding:14px 16px; background:var(--surface);}
+  .ex-card h4{font-size:14.5px; display:flex; justify-content:space-between; gap:8px; align-items:baseline;}
+  .ex-card .target{font-size:12px; color:var(--muted); font-weight:400; flex:none;}
+  .ex-card .how{font-size:13px; color:var(--ink-2); margin-top:6px;}
+  .ex-card .dose{font-size:13px; margin-top:8px; color:var(--good-text); font-weight:600;}
+  .ex-card .for{font-size:12px; color:var(--muted); margin-top:4px;}
+  table.week{width:100%; border-collapse:collapse; margin-top:12px; font-size:13.5px;}
+  table.week th, table.week td{border:1px solid var(--grid); padding:8px 10px; text-align:left; vertical-align:top;}
+  table.week th{background:var(--page); font-size:13px; white-space:nowrap;}
+  .disclaimer{font-size:12.5px; color:var(--muted); margin-top:20px; padding:14px 16px;
+    background:var(--page); border-radius:10px; border:1px solid var(--grid);}
+  footer{margin-top:30px; text-align:center; font-size:12px; color:var(--muted);}
+  /* video modal */
+  #vmask{display:none; position:fixed; inset:0; background:rgba(11,11,11,.6); z-index:50;
+    align-items:center; justify-content:center; padding:16px;}
+  #vmodal{background:var(--surface); border-radius:14px; padding:18px; max-width:560px; width:100%;}
+  #vmodal h3{font-size:16px; margin-bottom:10px;}
+  #vmVideo{width:100%; max-height:55vh; border-radius:10px; background:#000;}
+  #vmRange{width:100%; margin:12px 0 4px;}
+  #vmTime{font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  @media print{
+    body{background:#fff;}
+    #step-guide,#step-upload,#loading,.btnrow,.no-print,footer .no-print{display:none !important;}
+    #report{display:block !important;}
+    .card{box-shadow:none; break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>📐 体态自测</h1>
+    <p>上传站立照片，AI 自动分析体态并给出改善建议与锻炼计划</p>
+    <span class="privacy">🔒 所有分析均在你的设备本地完成，照片不会被上传</span>
+  </header>
+
+  <!-- STEP 1 拍照要求 -->
+  <section class="card" id="step-guide">
+    <h2><span class="stepnum">1</span> 拍照要求</h2>
+    <p class="hint">请他人帮拍或用手机支架，距离约 2–3 米，镜头与胸口同高。也可以上传视频，从中截取一帧。</p>
+    <div class="guide">
+      <div><b>👕 着装</b>穿贴身衣物（运动背心/短裤最佳），扎起头发露出耳朵和脖子。</div>
+      <div><b>🧍 站姿</b>自然放松站立，双脚并拢，双臂自然下垂，目视前方，不要刻意挺直。</div>
+      <div><b>📷 取景</b>全身入镜（头顶到脚），背景尽量简洁，光线均匀，相机不倾斜。</div>
+      <div><b>🔄 三个角度</b>正面、侧面（左右任一侧）必拍，背面选拍（可筛查脊柱对称性）。</div>
+    </div>
+  </section>
+
+  <!-- STEP 2 上传 -->
+  <section class="card" id="step-upload">
+    <h2><span class="stepnum">2</span> 上传照片或视频</h2>
+    <div class="uploads">
+      <div class="slot" id="slot-front" data-view="front">
+        <input type="file" accept="image/*,video/*">
+        <div class="icon">🧍</div>
+        <h3>正面照</h3>
+        <div class="req must">必传 · 面向镜头</div>
+        <div class="body"></div>
+      </div>
+      <div class="slot" id="slot-side" data-view="side">
+        <input type="file" accept="image/*,video/*">
+        <div class="icon">🚶</div>
+        <h3>侧面照</h3>
+        <div class="req must">必传 · 左侧或右侧</div>
+        <div class="body"></div>
+      </div>
+      <div class="slot" id="slot-back" data-view="back">
+        <input type="file" accept="image/*,video/*">
+        <div class="icon">🧍‍♂️</div>
+        <h3>背面照</h3>
+        <div class="req">选传 · 背对镜头</div>
+        <div class="body"></div>
+      </div>
+    </div>
+    <div class="error-banner" id="errBanner"></div>
+    <div class="btnrow">
+      <button class="btn btn-primary" id="btnAnalyze" disabled>开始分析</button>
+      <span class="status-msg" id="statusMsg">请先上传正面照和侧面照</span>
+    </div>
+  </section>
+
+  <!-- LOADING -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div class="status-msg" id="loadingMsg">正在加载 AI 模型…</div>
+  </div>
+
+  <!-- REPORT -->
+  <section id="report"></section>
+
+  <footer>
+    <div>本工具仅作健康参考，不构成医疗诊断 · 分析基于 MediaPipe 姿态识别</div>
+    <div class="no-print" style="margin-top:4px;">© 2026 体态自测原型 v0.1</div>
+  </footer>
+</div>
+
+<!-- 视频取帧弹窗 -->
+<div id="vmask">
+  <div id="vmodal">
+    <h3>🎬 拖动进度条，选择一帧站姿清晰的画面</h3>
+    <video id="vmVideo" playsinline muted></video>
+    <input type="range" id="vmRange" min="0" max="1000" value="0">
+    <div id="vmTime">00:00 / 00:00</div>
+    <div class="btnrow">
+      <button class="btn btn-primary" id="vmCapture">✂️ 截取此帧</button>
+      <button class="btn btn-ghost" id="vmCancel">取消</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+/* ============================================================
+   体态自测 · 纯前端原型
+   姿态识别: MediaPipe Pose Landmarker (浏览器本地推理)
+   ============================================================ */
+
+const $ = s => document.querySelector(s);
+const state = { views: { front:null, side:null, back:null }, landmarker:null };
+
+/* ---------- 上传与视频取帧 ---------- */
+const VIEW_NAMES = { front:'正面', side:'侧面', back:'背面' };
+let pendingSlot = null;
+
+document.querySelectorAll('.slot').forEach(slot=>{
+  const input = slot.querySelector('input');
+  slot.addEventListener('click', ()=> input.click());
+  input.addEventListener('click', e=> e.stopPropagation());
+  input.addEventListener('change', async e=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    if(file.type.startsWith('video/')){
+      pendingSlot = slot.dataset.view;
+      openVideoModal(file);
+    }else if(file.type.startsWith('image/')){
+      const canvas = await fileToCanvas(file);
+      setView(slot.dataset.view, canvas);
+    }
+    input.value = '';
+  });
+});
+
+function fileToCanvas(file){
+  return new Promise((res, rej)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{ res(fitCanvas(img, img.naturalWidth, img.naturalHeight)); URL.revokeObjectURL(url); };
+    img.onerror = rej;
+    img.src = url;
+  });
+}
+function fitCanvas(src, w, h){
+  const MAX = 1280;
+  const k = Math.min(1, MAX / Math.max(w, h));
+  const c = document.createElement('canvas');
+  c.width = Math.round(w*k); c.height = Math.round(h*k);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c;
+}
+function setView(view, canvas){
+  state.views[view] = { canvas, result:null };
+  const slot = $('#slot-'+view);
+  slot.classList.add('filled');
+  slot.querySelector('.body').innerHTML =
+    `<img class="thumb" src="${canvas.toDataURL('image/jpeg',0.85)}" alt="${VIEW_NAMES[view]}预览">
+     <span class="replace">点击可重新选择</span>`;
+  refreshReady();
+}
+function refreshReady(){
+  const ok = state.views.front && state.views.side;
+  $('#btnAnalyze').disabled = !ok;
+  $('#statusMsg').textContent = ok ? '就绪，点击开始分析（首次需加载模型，约 10–30 秒）'
+    : '请先上传正面照和侧面照';
+}
+
+/* 视频取帧 */
+const vmask=$('#vmask'), vv=$('#vmVideo'), vr=$('#vmRange'), vt=$('#vmTime');
+let vmURL = null;
+function fmt(t){ t=Math.max(0,t||0); const m=Math.floor(t/60), s=Math.floor(t%60); return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
+function openVideoModal(file){
+  vmURL = URL.createObjectURL(file);
+  vv.src = vmURL; vr.value = 0;
+  vmask.style.display = 'flex';
+  vv.addEventListener('loadedmetadata', ()=>{ vt.textContent = '00:00 / '+fmt(vv.duration); }, {once:true});
+}
+vr.addEventListener('input', ()=>{
+  if(vv.duration) vv.currentTime = vr.value/1000 * vv.duration;
+});
+vv.addEventListener('timeupdate', ()=>{ vt.textContent = fmt(vv.currentTime)+' / '+fmt(vv.duration); });
+$('#vmCancel').addEventListener('click', closeVideoModal);
+function closeVideoModal(){ vmask.style.display='none'; vv.pause(); vv.removeAttribute('src'); if(vmURL){URL.revokeObjectURL(vmURL); vmURL=null;} }
+$('#vmCapture').addEventListener('click', ()=>{
+  if(!vv.videoWidth) return;
+  const c = fitCanvas(vv, vv.videoWidth, vv.videoHeight);
+  setView(pendingSlot, c);
+  closeVideoModal();
+});
+
+/* ---------- 模型加载与推理 ---------- */
+async function ensureLandmarker(){
+  if(state.landmarker) return state.landmarker;
+  const { PoseLandmarker, FilesetResolver } =
+    await import(new URL('./vision_bundle.mjs', location.href).href);
+  const vision = await FilesetResolver.forVisionTasks(
+    new URL('.', location.href).href);
+  const opts = delegate => ({
+    baseOptions:{
+      modelAssetPath: new URL('./pose_landmarker_full.task', location.href).href,
+      delegate
+    },
+    runningMode:'IMAGE', numPoses:1
+  });
+  try{ state.landmarker = await PoseLandmarker.createFromOptions(vision, opts('GPU')); }
+  catch(e){ state.landmarker = await PoseLandmarker.createFromOptions(vision, opts('CPU')); }
+  return state.landmarker;
+}
+
+/* ---------- 几何工具 ---------- */
+const D = r => r*180/Math.PI;
+const dist = (a,b)=>Math.hypot(a.x-b.x, a.y-b.y);
+function pts(lm, W, H){
+  const g = i => ({ x:lm[i].x*W, y:lm[i].y*H, v:(lm[i].visibility ?? 1) });
+  return { g };
+}
+/* 与竖直方向的夹角（度）。horiz: 水平分量, vert: 竖直分量(向上为正) */
+const vertAngle = (horiz, vert) => D(Math.atan2(horiz, Math.max(vert, 1e-6)));
+
+/* ---------- 指标定义与阈值 ---------- */
+function sev3(x, t1, t2){ return x < t1 ? 0 : (x < t2 ? 1 : 2); }
+const SEV_LABEL = ['正常','轻度','明显'];
+
+/* ---------- 各视角分析 ---------- */
+function analyzeFront(lm, W, H){
+  const { g } = pts(lm, W, H);
+  const Ls=g(11), Rs=g(12), Lh=g(23), Rh=g(24), Le=g(7), Re=g(8),
+        Lk=g(25), Rk=g(26), La=g(27), Ra=g(28);
+  const sw = Math.abs(Ls.x-Rs.x) || 1;
+  const hw = Math.abs(Lh.x-Rh.x) || 1;
+  const trunk = dist({x:(Ls.x+Rs.x)/2,y:(Ls.y+Rs.y)/2},{x:(Lh.x+Rh.x)/2,y:(Lh.y+Rh.y)/2}) || 1;
+  const findings = [], warns = [];
+  if(sw/trunk < 0.32) warns.push('这张照片看起来可能不是正面照（双肩间距过小），结果仅供参考。');
+
+  // 高低肩
+  const shAng = vertAngle(Ls.y-Rs.y, sw) ; // 相当于 atan(dy/sw)
+  const shAbs = Math.abs(D(Math.atan((Ls.y-Rs.y)/sw)));
+  const shSev = sev3(shAbs, 2.5, 5);
+  findings.push({ id:'unevenShoulders', view:'front', value:shAbs.toFixed(1)+'°',
+    range:'参考范围 < 2.5°', severity:shSev,
+    dir: shSev===0 ? '' : (Ls.y>Rs.y ? '左肩偏低' : '右肩偏低') });
+
+  // 头部侧倾（耳线，耳不可见时用眼线）
+  let e1=Le, e2=Re, src='耳';
+  if(Le.v<0.5 || Re.v<0.5){ e1=g(2); e2=g(5); src='眼'; }
+  const headTilt = Math.abs(D(Math.atan((e1.y-e2.y)/(Math.abs(e1.x-e2.x)||1))));
+  const htSev = sev3(headTilt, 3, 6);
+  findings.push({ id:'headTilt', view:'front', value:headTilt.toFixed(1)+'°（'+src+'线）',
+    range:'参考范围 < 3°', severity:htSev,
+    dir: htSev===0 ? '' : (e1.y>e2.y ? '头向左倾' : '头向右倾') });
+
+  // 骨盆侧倾
+  const hipTilt = Math.abs(D(Math.atan((Lh.y-Rh.y)/hw)));
+  const hpSev = sev3(hipTilt, 2.5, 5);
+  findings.push({ id:'pelvicObliquity', view:'front', value:hipTilt.toFixed(1)+'°',
+    range:'参考范围 < 2.5°', severity:hpSev,
+    dir: hpSev===0 ? '' : (Lh.y>Rh.y ? '骨盆左低右高' : '骨盆右低左高') });
+
+  // 腿型（X/O）
+  const kneeGap = Math.abs(Lk.x-Rk.x), ankleGap = Math.abs(La.x-Ra.x);
+  const legIdx = (kneeGap-ankleGap)/hw;
+  if(ankleGap > 0.65*hw){
+    findings.push({ id:'legShape', view:'front', value:'—', range:'需双脚并拢拍摄',
+      severity:-1, dir:'双脚未并拢，无法判断腿型，建议双脚并拢重拍' });
+  }else{
+    let sev=0, dir='';
+    if(legIdx >= 0.18){ sev = legIdx>=0.35?2:1; dir='O 型腿（膝内翻）倾向'; }
+    else if(legIdx <= -0.18){ sev = legIdx<=-0.35?2:1; dir='X 型腿（膝外翻）倾向'; }
+    findings.push({ id:'legShape', view:'front',
+      value:'膝踝间距差 '+(legIdx*100).toFixed(0)+'%（占骨盆宽）',
+      range:'参考范围 -18% ~ 18%', severity:sev, dir, lowConf:true });
+  }
+  return { findings, warns };
+}
+
+function analyzeSide(lm, W, H){
+  const { g } = pts(lm, W, H);
+  const visL = (g(7).v+g(11).v+g(23).v+g(25).v+g(27).v)/5;
+  const visR = (g(8).v+g(12).v+g(24).v+g(26).v+g(28).v)/5;
+  const L = visL >= visR;
+  const ear=g(L?7:8), sh=g(L?11:12), hip=g(L?23:24), knee=g(L?25:26), ankle=g(L?27:28), nose=g(0);
+  const facing = Math.sign(nose.x - sh.x) || 1; // 面朝方向 = 前方
+  const trunk = dist(sh, hip) || 1;
+  const findings = [], warns = [];
+  const sw = Math.abs(g(11).x - g(12).x);
+  if(sw/trunk > 0.45) warns.push('这张照片看起来可能不是标准侧面照（双肩间距偏大），结果仅供参考。');
+
+  // 头前倾
+  const headFwd = vertAngle((ear.x-sh.x)*facing, sh.y-ear.y);
+  const hfSev = headFwd<=0 ? 0 : sev3(headFwd, 10, 20);
+  findings.push({ id:'forwardHead', view:'side', value:Math.max(headFwd,0).toFixed(1)+'°',
+    range:'参考范围 < 10°', severity:hfSev,
+    dir: hfSev===0?'':'耳垂明显位于肩峰前方' });
+
+  // 圆肩 / 上背前倾（参考）
+  const trunkFwd = vertAngle((sh.x-hip.x)*facing, hip.y-sh.y);
+  const rsSev = trunkFwd<=0 ? 0 : sev3(trunkFwd, 6, 12);
+  findings.push({ id:'roundedShoulders', view:'side', value:Math.max(trunkFwd,0).toFixed(1)+'°',
+    range:'参考范围 < 6°', severity:rsSev, lowConf:true,
+    dir: rsSev===0?'':'肩部相对骨盆明显前移' });
+
+  // 骨盆前移（摇摆背倾向，参考）
+  const hipShift = vertAngle((hip.x-ankle.x)*facing, ankle.y-hip.y);
+  const psSev = hipShift<=0 ? 0 : sev3(hipShift, 5, 10);
+  findings.push({ id:'swayBack', view:'side', value:Math.max(hipShift,0).toFixed(1)+'°',
+    range:'参考范围 < 5°', severity:psSev, lowConf:true,
+    dir: psSev===0?'':'骨盆相对脚踝明显前移' });
+
+  // 膝超伸
+  const v1={x:hip.x-knee.x, y:hip.y-knee.y}, v2={x:ankle.x-knee.x, y:ankle.y-knee.y};
+  const dot = v1.x*v2.x+v1.y*v2.y;
+  const interior = D(Math.acos(Math.min(1,Math.max(-1, dot/((Math.hypot(v1.x,v1.y)*Math.hypot(v2.x,v2.y))||1)))));
+  const t = (knee.y-hip.y)/((ankle.y-hip.y)||1);
+  const xline = hip.x + t*(ankle.x-hip.x);
+  const off = (knee.x-xline)*facing; // <0 膝在髋踝连线后方
+  const deviation = 180-interior;
+  let khSev=0, khDir='', khVal='0.0°';
+  if(off < 0 && deviation > 0){
+    khSev = sev3(deviation, 5, 10);
+    khVal = deviation.toFixed(1)+'°';
+    khDir = khSev===0?'':'膝关节向后过度伸直';
+  }else if(off > 0 && deviation > 8){
+    khSev = -1; khVal='—';
+    khDir = '照片中膝盖处于弯曲状态，请伸直膝盖自然站立后重拍';
+  }
+  findings.push({ id:'kneeHyperext', view:'side', value:khVal,
+    range:'参考范围 < 5°', severity:khSev, dir:khDir });
+
+  return { findings, warns };
+}
+
+function analyzeBack(lm, W, H){
+  const { g } = pts(lm, W, H);
+  const Ls=g(11), Rs=g(12), Lh=g(23), Rh=g(24);
+  const sw = Math.abs(Ls.x-Rs.x)||1, hw = Math.abs(Lh.x-Rh.x)||1;
+  const findings=[], warns=[];
+  const shAbs = Math.abs(D(Math.atan((Ls.y-Rs.y)/sw)));
+  const hipAbs = Math.abs(D(Math.atan((Lh.y-Rh.y)/hw)));
+  const shSev = sev3(shAbs, 2.5, 5), hpSev = sev3(hipAbs, 2.5, 5);
+  // 只有肩与骨盆同时不平才提升等级；单一侧偏最多"轻度"
+  const combo = (shSev>0 && hpSev>0) ? Math.max(shSev, hpSev)
+                                     : Math.min(Math.max(shSev, hpSev), 1);
+  findings.push({ id:'spineSymmetry', view:'back',
+    value:'肩水平差 '+shAbs.toFixed(1)+'° · 骨盆水平差 '+hipAbs.toFixed(1)+'°',
+    range:'参考范围均 < 2.5°', severity:combo, lowConf:true,
+    dir: combo===0 ? '' : '背面观左右不对称' });
+  return { findings, warns };
+}
+
+/* ---------- 问题库：解释 / 建议 / 动作 ---------- */
+const ISSUES = {
+  unevenShoulders:{ name:'高低肩', icon:'🙍',
+    what:'两侧肩峰不在同一水平线上，常与单侧背包、长期单手用鼠标、肌肉张力不平衡有关。',
+    advice:'避免长期单肩背包；工作时键盘鼠标居中放置；每小时起身活动肩颈。',
+    exercises:['upperTrapStretch','shrugSymmetry','farmerCarry'] },
+  headTilt:{ name:'头部侧倾', icon:'🤔',
+    what:'头部习惯性向一侧偏，可能与歪头看屏幕、单侧夹手机打电话等习惯有关。',
+    advice:'屏幕放正对视线正前方；避免用肩膀夹手机；对镜自查并主动回正。',
+    exercises:['neckSideStretch','mirrorReset'] },
+  pelvicObliquity:{ name:'骨盆侧倾', icon:'⚖️',
+    what:'骨盆左右不水平，常见于跷二郎腿、重心长期偏向一条腿站立（稍息站）等习惯。',
+    advice:'站立时双腿均匀承重；减少跷二郎腿；久坐时保持坐骨均匀受力。',
+    exercises:['sidePlank','clamshell','singleLegBridge'] },
+  legShape:{ name:'腿型（X/O 型倾向）', icon:'🦵',
+    what:'膝关节内翻（O 型）或外翻（X 型）倾向。照片筛查仅供参考，明显者建议线下评估。',
+    advice:'避免跪坐、W 坐姿；注意走路时膝盖与脚尖方向一致；选择支撑合适的鞋。',
+    exercises:['wallSitBall','bandSideWalk','footArch'] },
+  forwardHead:{ name:'头前倾', icon:'📱',
+    what:'耳垂位于肩峰前方，"低头族"最常见的体态问题，颈后肌群长期紧张，易颈肩酸痛、头痛。',
+    advice:'手机抬高到视线水平；电脑屏幕上沿与眉毛齐平；每 30 分钟做一次收下巴。',
+    exercises:['chinTuck','neckExtStretch','wallStand'] },
+  roundedShoulders:{ name:'圆肩驼背倾向', icon:'🐢',
+    what:'肩部相对骨盆前移，胸肌紧张、上背部力量不足，常与久坐伏案有关。',
+    advice:'调整桌椅高度让前臂自然平放；久坐每小时做扩胸；睡姿避免高枕侧蜷。',
+    exercises:['doorwayStretch','facePull','ytwRaise','catCow'] },
+  swayBack:{ name:'骨盆前移（摇摆背倾向）', icon:'🧘',
+    what:'骨盆相对脚踝前移、上身后仰的"瘫站"姿势，核心与臀肌参与不足。',
+    advice:'站立时让耳、肩、髋、踝大致一条线；避免长期"瘫站"倚靠。',
+    exercises:['gluteBridge','deadBug','plank','hipFlexorStretch'] },
+  kneeHyperext:{ name:'膝超伸', icon:'🦿',
+    what:'站立时膝关节向后过度伸直"锁死"，膝关节后侧受压增大，常伴腘绳肌无力。',
+    advice:'站立时保持膝盖微松不锁死；上下楼梯放慢速度体会腿后侧发力。',
+    exercises:['softKneeStand','hamstringCurl','calfControl'] },
+  spineSymmetry:{ name:'脊柱对称性提示', icon:'🩻',
+    what:'背面观肩部与骨盆左右高度差同时偏大时，建议进一步排查脊柱侧弯（如前屈试验），尤其是青少年。',
+    advice:'如为青少年或伴随背部疼痛，建议尽早到骨科/脊柱专科拍片确认，勿仅依赖照片筛查。',
+    exercises:['sidePlank','birdDog'] }
+};
+
+const EXERCISES = {
+  chinTuck:{ name:'收下巴训练', target:'深层颈屈肌', type:'strength',
+    how:'坐或站，目视前方，水平向后收下巴（想象做"双下巴"），保持 2 秒后放松。全程不低头不仰头。',
+    dose:'每天 3 组 × 10 次' },
+  neckExtStretch:{ name:'颈后肌群拉伸', target:'枕下肌 / 上斜方肌', type:'stretch',
+    how:'收下巴后，双手轻扶后脑勺向前下方缓慢加力，感受颈后侧拉伸，勿猛压。',
+    dose:'每次 30 秒 × 3 次，每天 1–2 轮' },
+  wallStand:{ name:'靠墙站立训练', target:'全身姿态感知', type:'strength',
+    how:'背贴墙站立，脚跟离墙约 5 cm，让臀部、上背、后脑勺三点贴墙，收下巴，保持自然呼吸。',
+    dose:'每天 2 次 × 2 分钟' },
+  doorwayStretch:{ name:'门框胸肌拉伸', target:'胸大肌 / 胸小肌', type:'stretch',
+    how:'手臂呈 90° 扶住门框两侧，身体缓慢前压至胸前侧有拉伸感，保持均匀呼吸。',
+    dose:'每次 30 秒 × 3 次，每天 1–2 轮' },
+  facePull:{ name:'弹力带面拉', target:'中下斜方肌 / 三角肌后束', type:'strength',
+    how:'弹力带固定于面部高度，双手拉向面部两侧，肘部抬平，肩胛骨向后下收紧，缓慢还原。',
+    dose:'每周 3 次，3 组 × 15 次' },
+  ytwRaise:{ name:'俯卧 YTW 字母操', target:'上背部肌群', type:'strength',
+    how:'俯卧，双臂依次摆出 Y、T、W 字形并向上抬起 2 秒，拇指朝上，感受肩胛骨收紧。',
+    dose:'每周 3 次，3 组 ×（每个字母 8 次）' },
+  catCow:{ name:'猫牛式', target:'胸椎灵活度', type:'stretch',
+    how:'四点跪姿，吸气塌腰抬头（牛式），呼气拱背低头（猫式），缓慢交替。',
+    dose:'每天 1 轮 × 10 个循环' },
+  upperTrapStretch:{ name:'上斜方肌拉伸（偏高侧）', target:'上斜方肌', type:'stretch',
+    how:'坐姿，一手抓住凳子边缘下沉肩膀，头向对侧倾斜，对侧手轻扶头部加力。拉伸偏高的那一侧。',
+    dose:'每次 30 秒 × 3 次，每天 1–2 轮' },
+  shrugSymmetry:{ name:'对镜耸肩对称训练', target:'肩带控制', type:'strength',
+    how:'对镜站立，双肩同时缓慢耸起—下沉，观察并主动让两侧幅度一致。',
+    dose:'每天 2 组 × 12 次' },
+  farmerCarry:{ name:'单侧农夫行走（偏低侧）', target:'肩带稳定 / 核心抗侧屈', type:'strength',
+    how:'偏低一侧手提哑铃或水桶，保持躯干正直行走，不让身体歪向一边。',
+    dose:'每周 3 次，3 组 × 20 米' },
+  neckSideStretch:{ name:'颈部侧向拉伸', target:'颈侧肌群', type:'stretch',
+    how:'头向一侧倾，同侧手轻扶头部加力，对侧肩膀下沉，两侧都做、紧的一侧多做。',
+    dose:'每次 30 秒 × 2 次/侧' },
+  mirrorReset:{ name:'对镜正位练习', target:'姿态感知', type:'strength',
+    how:'对镜站立，主动把头调到正中（双耳等高），闭眼 10 秒再睁眼检查是否偏移，反复校准。',
+    dose:'每天 3 分钟' },
+  sidePlank:{ name:'侧平板支撑', target:'腹斜肌 / 腰方肌', type:'strength',
+    how:'侧卧用前臂撑地，身体呈直线，骨盆抬离地面。两侧都做，弱侧可加量。',
+    dose:'每周 3–4 次，每侧 3 组 × 30 秒' },
+  clamshell:{ name:'蚌式开合', target:'臀中肌', type:'strength',
+    how:'侧卧屈膝，双脚并拢，像贝壳一样打开上侧膝盖至最大幅度，骨盆保持不翻转。',
+    dose:'每周 3–4 次，每侧 3 组 × 15 次' },
+  singleLegBridge:{ name:'单腿臀桥', target:'臀大肌 / 骨盆稳定', type:'strength',
+    how:'仰卧屈膝，一腿伸直，另一腿发力将骨盆抬起至躯干与大腿成直线，保持骨盆水平。',
+    dose:'每周 3 次，每侧 3 组 × 10 次' },
+  wallSitBall:{ name:'靠墙静蹲夹球', target:'股四头肌内侧 / 内收肌', type:'strength',
+    how:'背靠墙下蹲至大腿约 45°，两膝间夹一个软球或瑜伽砖，轻轻内夹保持。',
+    dose:'每周 3–4 次，3 组 × 45 秒' },
+  bandSideWalk:{ name:'弹力带侧向行走', target:'臀中肌', type:'strength',
+    how:'弹力带套在膝上方，半蹲位向一侧横向行走，膝盖始终对准脚尖方向。',
+    dose:'每周 3 次，3 组 × 10 步/方向' },
+  footArch:{ name:'足弓短足训练', target:'足底内在肌', type:'strength',
+    how:'坐姿赤脚，脚趾不弯曲，尝试把前脚掌向脚跟方向"收缩"抬起足弓，保持 5 秒。',
+    dose:'每天 3 组 × 10 次' },
+  gluteBridge:{ name:'臀桥', target:'臀大肌', type:'strength',
+    how:'仰卧屈膝，脚跟发力将骨盆抬起，顶端夹紧臀部 2 秒，避免腰部过度反弓。',
+    dose:'每周 3–4 次，3 组 × 15 次' },
+  deadBug:{ name:'死虫式', target:'深层核心', type:'strength',
+    how:'仰卧，双臂指天、屈髋屈膝 90°，腰部贴地，对侧手脚缓慢伸出再收回，全程腰不离地。',
+    dose:'每周 3–4 次，3 组 × 10 次/侧' },
+  plank:{ name:'平板支撑', target:'核心整体', type:'strength',
+    how:'肘撑俯卧，身体呈直线，收腹夹臀，不塌腰不撅臀。',
+    dose:'每周 3–4 次，3 组 × 30–60 秒' },
+  hipFlexorStretch:{ name:'跪姿髂腰肌拉伸', target:'髂腰肌', type:'stretch',
+    how:'单膝跪地呈弓步，收紧臀部使骨盆后倾，身体前移至跪侧大腿根前侧有拉伸感。',
+    dose:'每次 30 秒 × 3 次/侧' },
+  softKneeStand:{ name:'微屈膝站姿练习', target:'姿态习惯重建', type:'strength',
+    how:'站立时刻意保持膝盖放松微屈（不锁死），每次想起来就自查一次，逐渐形成习惯。',
+    dose:'贯穿日常，每天有意识练习' },
+  hamstringCurl:{ name:'俯卧勾腿 / 臀桥行走', target:'腘绳肌', type:'strength',
+    how:'俯卧位缓慢勾小腿对抗弹力带阻力；或臀桥位双脚交替小步前后走。',
+    dose:'每周 3 次，3 组 × 12 次' },
+  calfControl:{ name:'提踵离心控制', target:'小腿三头肌控制力', type:'strength',
+    how:'双脚提踵后，用 3–4 秒缓慢下落，训练下落过程的控制而非速度。',
+    dose:'每周 3 次，3 组 × 12 次' },
+  birdDog:{ name:'鸟狗式', target:'核心抗旋转', type:'strength',
+    how:'四点跪姿，对侧手脚同时伸出至与躯干成直线，保持骨盆水平不晃动，缓慢收回。',
+    dose:'每周 3–4 次，3 组 × 8 次/侧' }
+};
+
+/* ---------- 绘制标注 ---------- */
+const BONES = [[11,12],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],
+               [11,13],[13,15],[12,14],[14,16],[7,8]];
+function drawAnnotated(view, entry){
+  const src = entry.canvas, lm = entry.lm;
+  const c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(src, 0, 0);
+  if(!lm) return c;
+  const W=c.width, H=c.height;
+  const p = i => ({x:lm[i].x*W, y:lm[i].y*H});
+  const lw = Math.max(2, W/420);
+
+  // 铅垂参考线（过两踝中点）
+  const am = { x:(p(27).x+p(28).x)/2, y:0 };
+  ctx.setLineDash([8,7]);
+  ctx.strokeStyle = 'rgba(137,135,129,.9)';
+  ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(am.x, 0); ctx.lineTo(am.x, H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 骨架
+  ctx.strokeStyle = 'rgba(42,120,214,.9)';
+  ctx.lineWidth = lw;
+  BONES.forEach(([a,b])=>{
+    if((lm[a].visibility??1)<0.4 || (lm[b].visibility??1)<0.4) return;
+    ctx.beginPath(); ctx.moveTo(p(a).x,p(a).y); ctx.lineTo(p(b).x,p(b).y); ctx.stroke();
+  });
+  // 重点测量线（橙色）
+  ctx.strokeStyle = '#eb6834'; ctx.lineWidth = lw*1.4;
+  const hl = view==='side'
+    ? [[7,11],[11,23],[23,27]]         // 耳-肩-髋-踝
+    : [[11,12],[23,24]];               // 肩线 / 骨盆线
+  hl.forEach(([a,b])=>{
+    // 侧面只画可见性高的一侧
+    if(view==='side'){
+      const alt = {7:8,11:12,23:24,27:28};
+      const av=(lm[a].visibility??1), bv=(lm[alt[a]]?.visibility??1);
+      if(bv>av){ a=alt[a]; b=alt[b]??b; }
+    }
+    ctx.beginPath(); ctx.moveTo(p(a).x,p(a).y); ctx.lineTo(p(b).x,p(b).y); ctx.stroke();
+  });
+  // 关键点
+  [0,7,8,11,12,23,24,25,26,27,28].forEach(i=>{
+    if((lm[i].visibility??1)<0.4) return;
+    ctx.beginPath(); ctx.arc(p(i).x, p(i).y, lw*2.2, 0, Math.PI*2);
+    ctx.fillStyle='#fff'; ctx.fill();
+    ctx.lineWidth=lw*0.9; ctx.strokeStyle='#2a78d6'; ctx.stroke();
+  });
+  return c;
+}
+
+/* ---------- 分析主流程 ---------- */
+$('#btnAnalyze').addEventListener('click', runAnalysis);
+async function runAnalysis(){
+  $('#errBanner').style.display='none';
+  $('#step-upload').scrollIntoView({behavior:'smooth'});
+  $('#loading').style.display='block';
+  $('#report').style.display='none';
+  $('#btnAnalyze').disabled = true;
+  try{
+    $('#loadingMsg').textContent = '正在加载 AI 模型（首次加载约 10 MB，请稍候）…';
+    const lk = await ensureLandmarker();
+    const allFindings = [], allWarns = [], failed = [];
+    for(const view of ['front','side','back']){
+      const entry = state.views[view];
+      if(!entry) continue;
+      $('#loadingMsg').textContent = '正在分析'+VIEW_NAMES[view]+'照…';
+      await new Promise(r=>setTimeout(r, 30));
+      const res = lk.detect(entry.canvas);
+      if(!res.landmarks || !res.landmarks.length){
+        failed.push(view); entry.lm = null; continue;
+      }
+      entry.lm = res.landmarks[0];
+      const W = entry.canvas.width, H = entry.canvas.height;
+      const out = view==='front' ? analyzeFront(entry.lm,W,H)
+                : view==='side'  ? analyzeSide(entry.lm,W,H)
+                : analyzeBack(entry.lm,W,H);
+      out.findings.forEach(f=>allFindings.push(f));
+      out.warns.forEach(w=>allWarns.push(VIEW_NAMES[view]+'照：'+w));
+    }
+    if(failed.includes('front') || failed.includes('side')){
+      throw new Error('未能在'+failed.map(v=>VIEW_NAMES[v]).join('、')+'照中识别到完整人体。请确认全身入镜、光线充足后重试。');
+    }
+    renderReport(allFindings, allWarns, failed);
+  }catch(err){
+    console.error(err);
+    const eb = $('#errBanner');
+    eb.textContent = '⚠️ 分析失败：'+(err.message||'未知错误')+
+      (String(err).includes('fetch')||String(err).includes('network') ? '（可能是网络无法访问模型资源，请检查网络后重试）' : '');
+    eb.style.display='block';
+  }finally{
+    $('#loading').style.display='none';
+    $('#btnAnalyze').disabled = false;
+  }
+}
+
+/* ---------- 报告渲染 ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const SEV_CHIP = i =>
+  i===0 ? '<span class="chip s0">✓ 正常</span>' :
+  i===1 ? '<span class="chip s1">⚠ 轻度</span>' :
+  i===2 ? '<span class="chip s2">● 明显</span>' :
+          '<span class="chip na">— 无法判断</span>';
+
+function renderReport(findings, warns, failedViews){
+  // 评分
+  let score = 100;
+  findings.forEach(f=>{ if(f.severity===1) score-=4; else if(f.severity===2) score-=9; });
+  score = Math.max(35, score);
+  const grade = score>=90 ? ['优秀','s0','✓'] : score>=75 ? ['良好','s1','⚠']
+              : score>=60 ? ['需改善','s2','●'] : ['建议重点关注','s2','●'];
+  const n1 = findings.filter(f=>f.severity===1).length;
+  const n2 = findings.filter(f=>f.severity===2).length;
+  const issues = findings.filter(f=>f.severity>0);
+
+  // 视图标注图
+  let viewsHTML = '';
+  for(const view of ['front','side','back']){
+    const entry = state.views[view];
+    if(!entry || !entry.lm) continue;
+    const c = drawAnnotated(view, entry);
+    viewsHTML += `<div class="viewbox">
+      <img src="${c.toDataURL('image/jpeg',0.86)}" style="max-width:100%;border-radius:10px;border:1px solid var(--grid);" alt="${VIEW_NAMES[view]}标注图">
+      <div class="cap">${VIEW_NAMES[view]}照 · 蓝色为识别骨架，橙色为测量线，灰色虚线为铅垂参考线</div>
+    </div>`;
+  }
+
+  // 指标卡片
+  let findingsHTML = '';
+  findings.forEach(f=>{
+    const lib = ISSUES[f.id];
+    findingsHTML += `<div class="finding">
+      <div class="head">
+        <span class="name">${lib.icon} ${lib.name}</span>
+        <span style="display:flex;gap:10px;align-items:center;">
+          <span class="val">${esc(f.value)}</span>${SEV_CHIP(f.severity)}
+        </span>
+      </div>
+      <div class="range-note">${esc(f.range)}${f.dir ? ' · '+esc(f.dir):''}</div>
+      ${f.severity>0 ? `<div class="desc">${esc(lib.what)}</div>
+      <div class="advice">💡 ${esc(lib.advice)}</div>`:''}
+      ${f.lowConf ? '<div class="lowconf">※ 该指标基于照片估算，精度有限，仅供参考</div>':''}
+    </div>`;
+  });
+
+  // 锻炼推荐
+  const exKeys = [];
+  const exFor = {};
+  issues.forEach(f=>{
+    (ISSUES[f.id].exercises||[]).forEach(k=>{
+      if(!exKeys.includes(k)) exKeys.push(k);
+      (exFor[k] = exFor[k] || []).push(ISSUES[f.id].name);
+    });
+  });
+  let exHTML='', weekHTML='';
+  if(exKeys.length){
+    exHTML = '<div class="ex-grid">'+exKeys.map(k=>{
+      const e = EXERCISES[k];
+      return `<div class="ex-card">
+        <h4>${esc(e.name)}<span class="target">${esc(e.target)}</span></h4>
+        <div class="how">${esc(e.how)}</div>
+        <div class="dose">📅 ${esc(e.dose)}</div>
+        <div class="for">针对：${exFor[k].join('、')}</div>
+      </div>`;
+    }).join('')+'</div>';
+
+    const stretches = exKeys.filter(k=>EXERCISES[k].type==='stretch');
+    const strengths = exKeys.filter(k=>EXERCISES[k].type==='strength');
+    const dayA = strengths.filter((_,i)=>i%2===0), dayB = strengths.filter((_,i)=>i%2===1);
+    const nm = arr => arr.map(k=>EXERCISES[k].name).join('、') || '休息';
+    weekHTML = `<table class="week">
+      <tr><th>周一 / 周四</th><td>训练 A：${esc(nm(dayA))}</td></tr>
+      <tr><th>周二 / 周五</th><td>训练 B：${esc(nm(dayB))}</td></tr>
+      <tr><th>周三 / 周六</th><td>${stretches.length?('拉伸放松：'+esc(nm(stretches))):'快走、游泳等轻有氧 30 分钟'}</td></tr>
+      <tr><th>每天</th><td>${stretches.length?('拉伸类动作可每天进行：'+esc(nm(stretches))+'；'):''}姿势自查：耳、肩、髋、踝一条线</td></tr>
+    </table>
+    <p class="hint" style="margin-top:8px;">坚持 4–6 周后建议重新测试，对比改善情况。训练中如出现疼痛请立即停止。</p>`;
+  }
+
+  const warnsHTML = warns.length || failedViews.length
+    ? `<div class="warn-banner">${[...warns, ...failedViews.map(v=>VIEW_NAMES[v]+'照未识别到人体，已跳过。')].map(esc).join('<br>')}</div>`
+    : '';
+
+  $('#report').innerHTML = `
+    <div class="card">
+      <h2>📋 体态评估报告 <span class="hint" style="font-weight:400;">${new Date().toLocaleDateString('zh-CN')}</span></h2>
+      ${warnsHTML}
+      <div class="hero">
+        <div class="score-tile">
+          <div class="num">${score}</div>
+          <div class="grade chip ${grade[1]}">${grade[2]} ${grade[0]}</div>
+        </div>
+        <div class="sum">
+          <p>${ issues.length===0
+            ? '各项指标均在参考范围内，体态状况良好，请继续保持健康的姿势习惯。'
+            : `共检测 ${findings.filter(f=>f.severity>=0).length} 项指标，发现 <b>${issues.length}</b> 项需要关注：${issues.map(f=>ISSUES[f.id].name).join('、')}。下方有逐项解读和针对性锻炼计划。`}</p>
+          <div class="counts">
+            <span><span class="dot" style="background:var(--good);"></span>正常 ${findings.filter(f=>f.severity===0).length} 项</span>
+            <span><span class="dot" style="background:var(--warn);"></span>轻度 ${n1} 项</span>
+            <span><span class="dot" style="background:var(--serious);"></span>明显 ${n2} 项</span>
+          </div>
+        </div>
+      </div>
+      <div class="views-grid">${viewsHTML}</div>
+    </div>
+
+    <div class="card">
+      <h2>🔍 逐项指标</h2>
+      ${findingsHTML}
+    </div>
+
+    ${exKeys.length ? `<div class="card">
+      <h2>🏋️ 针对性锻炼动作</h2>
+      <p class="hint">根据检测结果为你挑选的 ${exKeys.length} 个动作，按说明的组数次数循序渐进。</p>
+      ${exHTML}
+      <h2 style="margin-top:20px;">🗓️ 每周训练安排</h2>
+      ${weekHTML}
+    </div>` : ''}
+
+    <div class="disclaimer">⚕️ 免责声明：本报告由算法基于照片估算生成，测量精度受拍摄角度、着装、光线等影响，仅作健康参考，不构成医疗诊断。如有明显疼痛、麻木，或指标持续"明显"级别，请咨询骨科、康复科医生或专业体态评估师。</div>
+
+    <div class="btnrow no-print">
+      <button class="btn btn-primary" onclick="window.print()">🖨️ 打印 / 保存 PDF</button>
+      <button class="btn btn-ghost" id="btnRetest">🔄 重新测试</button>
+    </div>`;
+
+  $('#report').style.display='block';
+  $('#btnRetest').addEventListener('click', ()=>{
+    ['front','side','back'].forEach(v=>{
+      state.views[v]=null;
+      const slot=$('#slot-'+v); slot.classList.remove('filled');
+      slot.querySelector('.body').innerHTML='';
+    });
+    $('#report').style.display='none';
+    refreshReady();
+    window.scrollTo({top:0, behavior:'smooth'});
+  });
+  $('#report').scrollIntoView({behavior:'smooth'});
+}
+</script>
+</body>
+</html>
