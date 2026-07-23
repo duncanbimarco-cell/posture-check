@@ -298,17 +298,52 @@ $('#vmCapture').addEventListener('click', ()=>{
 });
 
 /* ---------- 模型加载与推理 ---------- */
+const setLoadMsg = t => { const el = $('#loadingMsg'); if(el) el.textContent = t; };
+
+/* 带进度和"卡死检测"的下载 */
+async function fetchWithProgress(url, label){
+  const resp = await fetch(url);
+  if(!resp.ok) throw new Error(label+'下载失败（HTTP '+resp.status+'）');
+  const total = +resp.headers.get('Content-Length') || 0;
+  const reader = resp.body.getReader();
+  const chunks = []; let got = 0, lastGot = 0, lastTick = Date.now();
+  const watchdog = setInterval(()=>{
+    if(got === lastGot && Date.now()-lastTick > 25000){
+      clearInterval(watchdog);
+      try{ reader.cancel(); }catch(e){}
+    }
+    if(got !== lastGot){ lastGot = got; lastTick = Date.now(); }
+  }, 5000);
+  try{
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value); got += value.length;
+      setLoadMsg('正在下载'+label+'… '+(got/1048576).toFixed(1)
+        +(total ? ' / '+(total/1048576).toFixed(1) : '')+' MB');
+    }
+  }finally{ clearInterval(watchdog); }
+  if(total && got < total){
+    throw new Error(label+'下载中断（网络不稳定）。请检查网络或换 Wi-Fi 后重试，已下载的部分会被浏览器缓存，重试会更快。');
+  }
+  const buf = new Uint8Array(got); let o = 0;
+  for(const c of chunks){ buf.set(c, o); o += c.length; }
+  return buf;
+}
+
 async function ensureLandmarker(){
   if(state.landmarker) return state.landmarker;
+  setLoadMsg('正在加载识别引擎（约 0.3 MB）…');
   const { PoseLandmarker, FilesetResolver } =
     await import(new URL('./vision_bundle.mjs', location.href).href);
+  setLoadMsg('正在加载识别引擎核心（约 9 MB，请耐心等待）…');
   const vision = await FilesetResolver.forVisionTasks(
     new URL('.', location.href).href);
+  const modelBuf = await fetchWithProgress(
+    new URL('./pose_landmarker_full.task', location.href).href, 'AI 模型（9.4 MB）');
+  setLoadMsg('正在初始化模型…');
   const opts = delegate => ({
-    baseOptions:{
-      modelAssetPath: new URL('./pose_landmarker_full.task', location.href).href,
-      delegate
-    },
+    baseOptions:{ modelAssetBuffer: modelBuf, delegate },
     runningMode:'IMAGE', numPoses:1
   });
   try{ state.landmarker = await PoseLandmarker.createFromOptions(vision, opts('GPU')); }
