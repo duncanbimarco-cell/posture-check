@@ -209,6 +209,7 @@
   </div>
 </div>
 
+<script src="./html2canvas.min.js"></script>
 <script type="module">
 /* ============================================================
    体态自测 · 纯前端原型
@@ -800,11 +801,34 @@ function renderReport(findings, warns, failedViews){
     <div class="disclaimer">⚕️ 免责声明：本报告由算法基于照片估算生成，测量精度受拍摄角度、着装、光线等影响，仅作健康参考，不构成医疗诊断。如有明显疼痛、麻木，或指标持续"明显"级别，请咨询骨科、康复科医生或专业体态评估师。</div>
 
     <div class="btnrow no-print">
-      <button class="btn btn-primary" onclick="window.print()">🖨️ 打印 / 保存 PDF</button>
+      <button class="btn btn-primary" id="btnSaveImg">💾 保存报告长图</button>
+      <button class="btn btn-ghost" onclick="window.print()">🖨️ 打印 / 保存 PDF</button>
       <button class="btn btn-ghost" id="btnRetest">🔄 重新测试</button>
     </div>`;
 
   $('#report').style.display='block';
+  $('#btnSaveImg').addEventListener('click', async ()=>{
+    const btn = $('#btnSaveImg');
+    btn.disabled = true; btn.textContent = '⏳ 正在生成长图…';
+    try{
+      const canvas = await html2canvas($('#report'), {
+        backgroundColor:'#f9f9f7', scale:2, useCORS:true,
+        windowWidth: Math.max(document.documentElement.clientWidth, 720)
+      });
+      const a = document.createElement('a');
+      const d = new Date();
+      a.download = '体态评估报告-' + d.getFullYear() + '-' +
+        String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + '.png';
+      a.href = canvas.toDataURL('image/png');
+      document.body.appendChild(a); a.click(); a.remove();
+      btn.textContent = '✅ 已保存到"下载"文件夹';
+      setTimeout(()=>{ btn.textContent='💾 保存报告长图'; btn.disabled=false; }, 3000);
+    }catch(err){
+      console.error(err);
+      btn.textContent = '保存失败，请改用"打印 / 保存 PDF"';
+      setTimeout(()=>{ btn.textContent='💾 保存报告长图'; btn.disabled=false; }, 3000);
+    }
+  });
   $('#btnRetest').addEventListener('click', ()=>{
     ['front','side','back'].forEach(v=>{
       state.views[v]=null;
